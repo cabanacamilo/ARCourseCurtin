@@ -24,10 +24,9 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         sceneView.showsStatistics = true
         
         // Create a new scene
-        let scene = SCNScene(named: "art.scnassets/ship.scn")!
         
         // Set the scene to the view
-        sceneView.scene = scene
+        sceneView.debugOptions = [ARSCNDebugOptions.showFeaturePoints, ARSCNDebugOptions.showWorldOrigin]
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -35,6 +34,8 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         // Create a session configuration
         let configuration = ARWorldTrackingConfiguration()
+        
+        configuration.planeDetection = [.horizontal]
 
         // Run the view's session
         sceneView.session.run(configuration)
@@ -46,7 +47,45 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         // Pause the view's session
         sceneView.session.pause()
     }
+    
+    func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
+        guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
+        DispatchQueue.main.async {
+            let floor = self.createFloor(planeAnchor: planeAnchor)
+            let podioum = self.createPodium(planeAnchor: planeAnchor)
+            node.addChildNode(floor)
+            node.addChildNode(podioum)
+        }
+        
+    }
+    
+    func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
+        DispatchQueue.main.async {
+            guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
+            for node in node.childNodes {
+                node.position = SCNVector3(planeAnchor.center.x, 0, planeAnchor.center.z)
+                if let plane = node.geometry as? SCNPlane {
+                    plane.width = CGFloat(planeAnchor.extent.x)
+                    plane.height = CGFloat(planeAnchor.extent.z)
+                }
+            }
+        }
+    }
+    
+    func createFloor(planeAnchor: ARPlaneAnchor) -> SCNNode {
+        let node = SCNNode()
+        let geometry = SCNPlane(width: CGFloat(planeAnchor.extent.x), height: CGFloat(planeAnchor.extent.z))
+        node.geometry = geometry
+        node.eulerAngles.x = -Float.pi / 2
+        node.opacity = 0.5
+        return node
+    }
 
+    func createPodium(planeAnchor: ARPlaneAnchor) -> SCNNode {
+        let node = SCNScene(named: "art.scnassets/podium.scn")!.rootNode.clone()
+        node.position = SCNVector3(planeAnchor.center.x, 0, planeAnchor.center.z)
+        return node
+    }
     // MARK: - ARSCNViewDelegate
     
 /*
