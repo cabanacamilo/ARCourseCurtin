@@ -13,10 +13,11 @@ import ARKit
 class ViewController: UIViewController, ARSCNViewDelegate {
 
     @IBOutlet var sceneView: ARSCNView!
+    var podiumAdded = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+        //
         // Set the view's delegate
         sceneView.delegate = self
         
@@ -48,13 +49,25 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         sceneView.session.pause()
     }
     
+    @IBAction func screenTapped(_ sender: UITapGestureRecognizer) {
+        if !podiumAdded {
+            let touchLocation = sender.location(in: sceneView)
+            let hitTestResult = sceneView.hitTest(touchLocation, types: [.existingPlane])
+            if let result = hitTestResult.first {
+                createPodium(result: result)
+                podiumAdded = true
+            }
+        } else {
+            createBall()
+        }
+        
+    }
+    
     func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
         guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
         DispatchQueue.main.async {
             let floor = self.createFloor(planeAnchor: planeAnchor)
-            let podioum = self.createPodium(planeAnchor: planeAnchor)
             node.addChildNode(floor)
-            node.addChildNode(podioum)
         }
         
     }
@@ -81,10 +94,27 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         return node
     }
 
-    func createPodium(planeAnchor: ARPlaneAnchor) -> SCNNode {
-        let node = SCNScene(named: "art.scnassets/podium.scn")!.rootNode.clone()
-        node.position = SCNVector3(planeAnchor.center.x, 0, planeAnchor.center.z)
-        return node
+    func createPodium(result: ARHitTestResult) {
+        let podiumScene = SCNScene(named: "art.scnassets/podium.scn")
+        guard let podiumNode = podiumScene?.rootNode.childNode(withName: "podium", recursively: false) else { return }
+        let planePosition = result.worldTransform.columns.3
+        podiumNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: podiumNode, options: nil))
+        podiumNode.position = SCNVector3(planePosition.x, planePosition.y, planePosition.z)
+        sceneView.scene.rootNode.addChildNode(podiumNode)
+    }
+    
+    func createBall() {
+        guard let currentFrame = sceneView.session.currentFrame else { return }
+        let ball = SCNNode(geometry: SCNSphere(radius: 0.125))
+        ball.geometry?.firstMaterial?.diffuse.contents = UIColor.cyan
+        let physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball, options: nil))
+        ball.physicsBody = physicsBody
+        let cameraTransform = SCNMatrix4(currentFrame.camera.transform)
+        let power = Float(10)
+        let force = SCNVector3(-cameraTransform.m31 * power, -cameraTransform.m32 * power, -cameraTransform.m33 * power)
+        ball .physicsBody?.applyForce(force, asImpulse: true)
+        ball.transform = cameraTransform
+        sceneView.scene.rootNode.addChildNode(ball)
     }
     // MARK: - ARSCNViewDelegate
     
